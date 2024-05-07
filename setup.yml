@@ -1,0 +1,25 @@
+---
+- name: Install required Ansible roles
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - name: Install required roles from Ansible Galaxy
+      ansible.builtin.command:
+        cmd: ansible-galaxy install -r requirements.yml
+      delegate_to: localhost
+
+- name: Setup Zsh as default shell
+  hosts: all
+  become: yes
+  gather_facts: yes  # Ensure this is 'yes' to gather facts about the current user
+
+  roles:
+    - role: viasite-ansible.zsh
+      vars:
+        zsh_user: "{{ ansible_user_id }}"  # Set dynamically to the current user
+        zsh_antigen_bundles_extras:
+          - git
+          - ansible
+          - python
+          - autopep8

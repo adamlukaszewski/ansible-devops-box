@@ -1,0 +1,77 @@
+
+- name: Setup Ubuntu System
+  hosts: localhost
+  become: yes
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+    - name: Remove unnecessary packages
+      apt:
+        name: thunderbird*
+        state: absent
+    - name: Install Git
+      become: true
+      ansible.builtin.package:
+        state: present
+        name: git
+    - name: Install ZSH
+      become: true
+      ansible.builtin.package:
+        name: zsh
+        state: present
+    - name: Override powerline fonts package name for Debian.
+      ansible.builtin.set_fact:
+        powerlinefonts: fonts-powerline
+      when: ansible_os_family == 'Debian'
+    - name: Install Powerline fonts
+      become: true
+      ansible.builtin.package:
+        state: present
+        name: "{{ powerlinefonts }}"
+    - name: Install necessary packages
+      apt:
+        name:
+          - git
+          - openvpn
+          - openjdk-17-jdk
+          - maven
+          - inkscape
+          - vim
+          - fonts-powerline
+          - zsh
+        state: present
+    - name: Ensure Zsh with dependencies are installed
+      apt:
+        name: "{{ ['zsh'] }}"
+        state: present
+        update_cache: yes
+      become: true
+    - name: Ensure zsh is the default shell
+      user:
+        name: "{{ ansible_user }}"
+        shell: "/usr/bin/zsh"
+      become: true
+    - name: Install snap packages
+      community.general.snap:
+        name: scrcpy
+        classic: yes
+    - name: Clone VundleVim repository
+      git:
+        repo: 'https://github.com/VundleVim/Vundle.vim.git'
+        dest: ~/.vim/bundle/Vundle.vim
+    - name: Install Vim plugins
+      command: vim +PluginInstall +qall
+    - name: Install insync
+      block:
+        - apt_key:
+            url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xAACCAF35C'
+            state: present
+        - apt_repository:
+            repo: 'deb http://apt.insync.io/ubuntu {{ ansible_distribution_release }} non-free contrib'
+            state: present
+        - apt:
+            name: insync
+            state: present
+
