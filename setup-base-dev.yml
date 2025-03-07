@@ -1,0 +1,486 @@
+# before you can run this base dev ansible you need to install the ansible environment:
+# sudo apt update && sudo apt install -y ansible && sudo ansible --version
+#
+# Than just run this in the folder:
+# ansible-playbook setup-base-dev.yml --ask-become-pass
+- name: Setup Ubuntu System
+  hosts: localhost
+  vars:
+    python_version: "3.12.9"
+    node_version: "20.0.0"
+    java_version: "21"
+    terraform_version: "1.3.9"
+    ansible_user: "{{ lookup('env', 'USER') }}"
+  tasks:
+    - name: Update and upgrade apt packages
+      become: yes
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Remove unnecessary packages
+      become: yes
+      apt:
+        name: thunderbird*
+        state: absent
+
+    - name: Install necessary packages
+      become: yes
+      apt:
+        name:
+          - git
+          - openvpn
+          - vim
+          - fonts-powerline
+          - zsh
+          - tmux
+          - curl
+          - build-essential
+          - libssl-dev
+          - zlib1g-dev
+          - libbz2-dev
+          - libreadline-dev
+          - libsqlite3-dev
+          - wget
+          - llvm
+          - libncurses5-dev
+          - libncursesw5-dev
+          - xz-utils
+          - tk-dev
+          - libffi-dev
+          - liblzma-dev
+          - python3-openssl
+          - libfuse2
+          - git
+          - python3-pip
+        state: present
+
+    - name: Ensure Powerline fonts are set for Debian
+      ansible.builtin.set_fact:
+        powerlinefonts: fonts-powerline
+      when: ansible_os_family == 'Debian'
+
+    - name: Install Powerline fonts
+      become: yes
+      apt:
+        name: "{{ powerlinefonts }}"
+        state: present
+
+    - name: Clone VundleVim repository
+      git:
+        repo: 'https://github.com/VundleVim/Vundle.vim.git'
+        dest: "{{ lookup('env', 'HOME') }}/.vim/bundle/VundleVim"
+
+    - name: Install Vim plugins
+      shell: vim +PluginInstall +qall
+      args:
+        creates: "{{ lookup('env', 'HOME') }}/.vim/bundle"
+      environment:
+        HOME: "{{ lookup('env', 'HOME') }}"
+        
+    - name: Install dependencies for jenv
+      become: yes
+      apt:
+        name:
+          - git
+          - curl
+          - openjdk-21-jdk  # Install Java 21
+        state: present
+
+    - name: Clone jenv repository
+      git:
+        repo: 'https://github.com/jenv/jenv.git'
+        dest: "{{ lookup('env', 'HOME') }}/.jenv"
+        update: yes
+
+    - name: Set up jenv environment variables in zshrc
+      lineinfile:
+        path: "{{ lookup('env', 'HOME') }}/.zshrc"
+        line: |
+          export JENV_ROOT="$HOME/.jenv"
+          export PATH="$JENV_ROOT/bin:$PATH"
+          eval "$(jenv init -)"
+        create: yes
+        state: present
+
+    - name: Ensure jenv is loaded for Ansible shell (using Zsh)
+      shell: |
+        export JENV_ROOT="$HOME/.jenv"
+        export PATH="$JENV_ROOT/bin:$PATH"
+        eval "$(jenv init -)"
+        jenv --version
+      environment:
+        HOME: "{{ lookup('env', 'HOME') }}"
+      args:
+        executable: /bin/zsh
+
+    - name: Find installed Java home
+      shell: |
+        update-alternatives --list java | sed 's|/bin/java||' | head -n 1
+      register: java_home
+
+    - name: Add installed Java to jenv
+      shell: |
+        export JENV_ROOT="$HOME/.jenv"
+        export PATH="$JENV_ROOT/bin:$PATH"
+        eval "$(jenv init -)"
+        jenv add {{ java_home.stdout }}
+      args:
+        creates: "{{ lookup('env', 'HOME') }}/.jenv/versions"
+        executable: /bin/zsh
+
+    - name: Enable jenv export plugin (using Zsh)
+      shell: |
+        export JENV_ROOT="$HOME/.jenv"
+        export PATH="$JENV_ROOT/bin:$PATH"
+        eval "$(jenv init -)"
+        jenv enable-plugin export
+      args:
+        executable: /bin/zsh
+
+    - name: Set global Java version with jenv
+      shell: |
+        export JENV_ROOT="$HOME/.jenv"
+        export PATH="$JENV_ROOT/bin:$PATH"
+        eval "$(jenv init -)"
+        jenv global $(jenv versions --bare | grep "^21" | head -n 1)
+        jenv rehash
+      args:
+        executable: /bin/zsh
+
+    - name: Verify Java version
+      shell: |
+        export JENV_ROOT="$HOME/.jenv"
+        export PATH="$JENV_ROOT/bin:$PATH"
+        eval "$(jenv init -)"
+        java -version
+      register: java_version
+      changed_when: false
+      args:
+        executable: /bin/zsh
+
+    - name: Display Java version
+      debug:
+        msg: "Java version installed: {{ java_version.stdout }}"
+
+
+
+    - name: Set up pyenv environment variables
+      lineinfile:
+        path: "{{ lookup('env', 'HOME') }}/.bashrc"
+        line: 'export PYENV_ROOT="$HOME/.pyenv"\nexport PATH="$PYENV_ROOT/bin:$PATH"\neval "$(pyenv init --path)"'
+        create: yes
+
+    - name: Install Python using pyenv
+      shell: |
+        export PYENV_ROOT="$HOME/.pyenv"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init --path)"
+        pyenv install {{ python_version }}
+        pyenv global {{ python_version }}
+      args:
+        creates: "{{ lookup('env', 'HOME') }}/.pyenv/versions/{{ python_version }}"
+      environment:
+        HOME: "{{ lookup('env', 'HOME') }}"
+
+    - name: Install Poetry using pyenv's Python
+      shell: |
+        export PYENV_ROOT="$HOME/.pyenv"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init --path)"
+        $(pyenv which pip) install --user poetry
+      environment:
+        HOME: "{{ lookup('env', 'HOME') }}"
+      args:
+        creates: "{{ lookup('env', 'HOME') }}/.local/bin/poetry"
+
+    - name: Add Poetry to PATH
+      lineinfile:
+        path: "{{ lookup('env', 'HOME') }}/.bashrc"
+        line: 'export PATH="$HOME/.local/bin:$PATH"'
+        create: yes
+
+    - name: Configure Poetry to not create virtualenvs inside project directories
+      shell: "{{ lookup('env', 'HOME') }}/.local/bin/poetry config virtualenvs.in-project false"
+      environment:
+        PATH: "{{ lookup('env', 'HOME') }}/.local/bin:{{ ansible_env.PATH }}"
+        HOME: "{{ lookup('env', 'HOME') }}"
+
+    - name: Verify Poetry installation
+      shell: "{{ lookup('env', 'HOME') }}/.local/bin/poetry --version"
+      register: poetry_version
+      changed_when: false
+
+    - name: Display Poetry version
+      debug:
+        msg: "Poetry version installed: {{ poetry_version.stdout }}"
+
+    - name: Clone nodenv repository
+      git:
+        repo: 'https://github.com/nodenv/nodenv.git'
+        dest: "{{ lookup('env', 'HOME') }}/.nodenv"
+        update: yes
+
+    - name: Set up nodenv environment variables
+      lineinfile:
+        path: "{{ lookup('env', 'HOME') }}/.bashrc"
+        line: 'export NODENV_ROOT="$HOME/.nodenv"\nexport PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"\neval "$(nodenv init -)"'
+        create: yes
+
+    - name: Install node-build plugin for nodenv (force fetch to avoid tag conflicts)
+      git:
+        repo: 'https://github.com/nodenv/node-build.git'
+        dest: "{{ lookup('env', 'HOME') }}/.nodenv/plugins/node-build"
+        version: master
+        force: yes
+        update: yes
+
+    - name: Install Node.js using nodenv
+      shell: |
+        export NODENV_ROOT="$HOME/.nodenv"
+        export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
+        eval "$(nodenv init -)"
+        nodenv install {{ node_version }}
+        nodenv global {{ node_version }}
+        nodenv rehash
+      args:
+        creates: "{{ lookup('env', 'HOME') }}/.nodenv/versions/{{ node_version }}"
+
+    - name: Verify Node.js installation
+      shell: |
+        export NODENV_ROOT="$HOME/.nodenv"
+        export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
+        eval "$(nodenv init -)"
+        node --version
+      register: node_version_output
+      changed_when: false
+
+    - name: Display Node.js version
+      debug:
+        msg: "Node.js version installed: {{ node_version_output.stdout }}"
+
+    - name: Install AWS CDK globally using npm
+      shell: |
+        export NODENV_ROOT="$HOME/.nodenv"
+        export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
+        eval "$(nodenv init -)"
+        npm install -g aws-cdk
+
+    - name: Install AWS CLI v2
+      become: yes
+      shell: |
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+        unzip /tmp/awscliv2.zip -d /tmp
+        /tmp/aws/install
+      args:
+        creates: "/usr/local/bin/aws"
+
+    - name: Verify AWS CLI installation
+      shell: "aws --version"
+      register: aws_cli_version
+      changed_when: false
+
+    - name: Display AWS CLI version
+      debug:
+        msg: "AWS CLI version installed: {{ aws_cli_version.stdout }}"
+
+    - name: Create .antigen directory
+      file:
+        path: "{{ lookup('env', 'HOME') }}/.antigen"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Clone Antigen repository
+      git:
+        repo: 'https://github.com/zsh-users/antigen.git'
+        dest: "{{ lookup('env', 'HOME') }}/.antigen/antigen"
+        version: master
+
+    - name: Copy prepared .zshrc to user's home directory
+      copy:
+        src: files/zshrc
+        dest: "{{ lookup('env', 'HOME') }}/.zshrc"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0644'
+
+    - name: Install fzf from GitHub
+      git:
+        repo: 'https://github.com/junegunn/fzf.git'
+        dest: "{{ lookup('env', 'HOME') }}/.fzf"
+        version: master
+
+    - name: Run fzf install script
+      shell: "{{ lookup('env', 'HOME') }}/.fzf/install --all"
+      args:
+        chdir: "{{ lookup('env', 'HOME') }}/.fzf"
+
+    - name: Set Zsh as default shell
+      become: yes
+      user:
+        name: "{{ ansible_user }}"
+        shell: /usr/bin/zsh
+
+    - name: Get latest IntelliJ Toolbox download URL
+      uri:
+        url: https://data.services.jetbrains.com/products/releases?code=TBA&latest=true&type=release
+        return_content: yes
+      register: toolbox_release
+
+    - name: Set IntelliJ Toolbox download URL
+      set_fact:
+        toolbox_download_url: "{{ toolbox_release.json.TBA[0].downloads.linux.link }}"
+
+    - name: Download IntelliJ Toolbox
+      become: yes
+      get_url:
+        url: "{{ toolbox_download_url }}"
+        dest: "/tmp/jetbrains-toolbox.tar.gz"
+
+    - name: Extract IntelliJ Toolbox
+      become: yes
+      unarchive:
+        src: "/tmp/jetbrains-toolbox.tar.gz"
+        dest: "/opt/"
+        remote_src: yes
+
+    - name: Find extracted IntelliJ Toolbox directory
+      shell: "ls -d /opt/jetbrains-toolbox-*"
+      register: toolbox_dir
+
+    - name: Install IntelliJ Toolbox
+      shell: "{{ toolbox_dir.stdout }}/jetbrains-toolbox"
+      args:
+        creates: "{{ lookup('env', 'HOME') }}/.local/share/JetBrains/Toolbox"
+
+    - name: Cleanup IntelliJ Toolbox installer
+      become: yes
+      file:
+        path: "/tmp/jetbrains-toolbox.tar.gz"
+        state: absent
+        
+    - name: Install dependencies for tfenv
+      become: yes
+      apt:
+        name:
+          - git
+          - curl
+        state: present
+
+    - name: Clone tfenv repository
+      git:
+        repo: 'https://github.com/tfutils/tfenv.git'
+        dest: "{{ lookup('env', 'HOME') }}/.tfenv"
+        update: yes
+
+    - name: Create symlinks for tfenv
+      become: yes
+      file:
+        src: "{{ lookup('env', 'HOME') }}/.tfenv/bin/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        state: link
+      loop:
+        - tfenv
+        - terraform
+
+    - name: Install Terraform {{ terraform_version }} using tfenv
+      shell: |
+        export PATH="$HOME/.tfenv/bin:$PATH"
+        tfenv install {{ terraform_version }}
+      args:
+        creates: "{{ lookup('env', 'HOME') }}/.tfenv/versions/{{ terraform_version }}"
+
+    - name: Set Terraform {{ terraform_version }} as global version
+      shell: |
+        export PATH="$HOME/.tfenv/bin:$PATH"
+        tfenv use {{ terraform_version }}
+
+    - name: Verify Terraform version
+      shell: terraform --version
+      register: terraform_version
+      changed_when: false
+
+    - name: Display Terraform version
+      debug:
+        msg: "Terraform version installed: {{ terraform_version.stdout }}"
+        
+    - name: Remove old versions of Docker if present
+      become: yes
+      apt:
+        name:
+          - docker
+          - docker-engine
+          - docker.io
+          - containerd
+          - runc
+        state: absent
+
+    - name: Update apt and install required packages
+      become: yes
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Add Docker’s official GPG key
+      become: yes
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+      args:
+        creates: /usr/share/keyrings/docker-archive-keyring.gpg
+
+    - name: Set up Docker APT repository
+      become: yes
+      shell: |
+        echo \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
+        $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    - name: Update apt cache after adding Docker repo
+      become: yes
+      apt:
+        update_cache: yes
+
+    - name: Install Docker Engine, CLI, and Containerd
+      become: yes
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: latest
+
+    - name: Ensure Docker service is started and enabled
+      become: yes
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add user to Docker group
+      become: yes
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Verify Docker installation
+      shell: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Display Docker version
+      debug:
+        msg: "Docker version installed: {{ docker_version.stdout }}"
+
+
+
+
+
