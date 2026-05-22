@@ -1,0 +1,9 @@
+{
+  "path": "cz-git",
+  "$schema": "https://raw.githubusercontent.com/Zhengqbbb/cz-git/refs/tags/v1.13.1/docs/public/schema/cz-git.json",
+  "scopes": [
+    "TEBTVIRAA-765"
+  ],
+  "allowCustomScopes": true,
+  "aiNumber": 5
+}
