@@ -12,6 +12,7 @@
     terraform_version: "1.14.4"
     tofu_version: "1.6.2"
     ansible_user: "{{ lookup('env', 'USER') }}"
+    user_home: "{{ lookup('env', 'HOME') }}"
   tasks:
     - name: Update and upgrade apt packages
       become: yes
@@ -30,19 +31,22 @@
       apt:
         name:
           - git
+          - curl
+          - wget
+          - unzip
           - openvpn
           - vim
+          - vim-gtk3
           - fonts-powerline
           - zsh
           - tmux
-          - curl
+          - htop
           - build-essential
           - libssl-dev
           - zlib1g-dev
           - libbz2-dev
           - libreadline-dev
           - libsqlite3-dev
-          - wget
           - llvm
           - libncurses5-dev
           - libncursesw5-dev
@@ -52,90 +56,71 @@
           - liblzma-dev
           - python3-openssl
           - libfuse2
-          - git
           - python3-pip
-          - htop
-          - vim-gtk3
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - lsb-release
+          - openjdk-21-jdk
         state: present
 
-    - name: Ensure Powerline fonts are set for Debian
-      ansible.builtin.set_fact:
-        powerlinefonts: fonts-powerline
-      when: ansible_os_family == 'Debian'
-
-    - name: Install Powerline fonts
-      become: yes
-      apt:
-        name: "{{ powerlinefonts }}"
-        state: present
     - name: Create fonts directory for user
       file:
-        path: "{{ lookup('env', 'HOME') }}/.local/share/fonts"
+        path: "{{ user_home }}/.local/share/fonts"
         state: directory
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0755'
 
-    - name: Download Meslo LGS NF font
+    - name: Download MesloLGS NF fonts for Powerlevel10k
       get_url:
-        url: "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.0.0/Meslo.zip"
-        dest: "/tmp/Meslo.zip"
-      register: font_download
-
-    - name: Extract Meslo LGS NF font
-      unarchive:
-        src: "/tmp/Meslo.zip"
-        dest: "{{ lookup('env', 'HOME') }}/.local/share/fonts"
-        remote_src: yes
+        url: "{{ item.url }}"
+        dest: "{{ user_home }}/.local/share/fonts/{{ item.name }}"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
+        mode: '0644'
+      loop:
+        - { name: "MesloLGS NF Regular.ttf",     url: "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf" }
+        - { name: "MesloLGS NF Bold.ttf",         url: "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold.ttf" }
+        - { name: "MesloLGS NF Italic.ttf",       url: "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Italic.ttf" }
+        - { name: "MesloLGS NF Bold Italic.ttf",  url: "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold%20Italic.ttf" }
 
     - name: Rebuild font cache
-      shell: "fc-cache -fv {{ lookup('env', 'HOME') }}/.local/share/fonts"
+      shell: "fc-cache -fv {{ user_home }}/.local/share/fonts"
       environment:
-        HOME: "{{ lookup('env', 'HOME') }}"
+        HOME: "{{ user_home }}"
+      changed_when: false
 
-    - name: Cleanup Meslo font zip file
-      file:
-        path: "/tmp/Meslo.zip"
-        state: absent
-        
+    - name: Get GNOME Terminal default profile UUID
+      shell: gsettings get org.gnome.Terminal.ProfilesList default | tr -d "'"
+      register: gnome_terminal_profile
+      changed_when: false
+
+    - name: Set MesloLGS NF as GNOME Terminal font
+      shell: |
+        gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:{{ gnome_terminal_profile.stdout }}/ font 'MesloLGS NF 12'
+        gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:{{ gnome_terminal_profile.stdout }}/ use-system-font false
+      environment:
+        HOME: "{{ user_home }}"
+      changed_when: false
+
     - name: Clone VundleVim repository
       git:
         repo: 'https://github.com/VundleVim/Vundle.vim.git'
-        dest: "{{ lookup('env', 'HOME') }}/.vim/bundle/VundleVim"
+        dest: "{{ user_home }}/.vim/bundle/VundleVim"
 
     - name: Install Vim plugins
       shell: vim +PluginInstall +qall
       args:
-        creates: "{{ lookup('env', 'HOME') }}/.vim/bundle"
+        creates: "{{ user_home }}/.vim/bundle/VundleVim/autoload/vundle.vim"
       environment:
-        HOME: "{{ lookup('env', 'HOME') }}"
-        
-    - name: Install dependencies for jenv
-      become: yes
-      apt:
-        name:
-          - git
-          - curl
-          - openjdk-21-jdk  # Install Java 21
-        state: present
+        HOME: "{{ user_home }}"
 
     - name: Clone jenv repository
       git:
         repo: 'https://github.com/jenv/jenv.git'
-        dest: "{{ lookup('env', 'HOME') }}/.jenv"
+        dest: "{{ user_home }}/.jenv"
         update: yes
-
-    - name: Set up jenv environment variables in zshrc
-      lineinfile:
-        path: "{{ lookup('env', 'HOME') }}/.zshrc"
-        line: |
-          export JENV_ROOT="$HOME/.jenv"
-          export PATH="$JENV_ROOT/bin:$PATH"
-          eval "$(jenv init -)"
-        create: yes
-        state: present
 
     - name: Ensure jenv is loaded for Ansible shell (using Zsh)
       shell: |
@@ -144,14 +129,16 @@
         eval "$(jenv init -)"
         jenv --version
       environment:
-        HOME: "{{ lookup('env', 'HOME') }}"
+        HOME: "{{ user_home }}"
       args:
         executable: /bin/zsh
+      changed_when: false
 
     - name: Find installed Java home
       shell: |
         update-alternatives --list java | sed 's|/bin/java||' | head -n 1
       register: java_home
+      changed_when: false
 
     - name: Add installed Java to jenv
       shell: |
@@ -160,7 +147,7 @@
         eval "$(jenv init -)"
         jenv add {{ java_home.stdout }}
       args:
-        creates: "{{ lookup('env', 'HOME') }}/.jenv/versions"
+        creates: "{{ user_home }}/.jenv/versions"
         executable: /bin/zsh
 
     - name: Enable jenv export plugin (using Zsh)
@@ -171,6 +158,7 @@
         jenv enable-plugin export
       args:
         executable: /bin/zsh
+      changed_when: false
 
     - name: Set global Java version with jenv
       shell: |
@@ -188,26 +176,20 @@
         export PATH="$JENV_ROOT/bin:$PATH"
         eval "$(jenv init -)"
         java -version
-      register: java_version
+      register: java_version_output
       changed_when: false
       args:
         executable: /bin/zsh
 
     - name: Display Java version
       debug:
-        msg: "Java version installed: {{ java_version.stdout }}"
+        msg: "Java version installed: {{ java_version_output.stderr }}"
 
     - name: Clone pyenv repository
       git:
         repo: 'https://github.com/pyenv/pyenv.git'
-        dest: "{{ lookup('env', 'HOME') }}/.pyenv"
+        dest: "{{ user_home }}/.pyenv"
         update: yes
-
-    - name: Set up pyenv environment variables
-      lineinfile:
-        path: "{{ lookup('env', 'HOME') }}/.bashrc"
-        line: 'export PYENV_ROOT="$HOME/.pyenv"\nexport PATH="$PYENV_ROOT/bin:$PATH"\neval "$(pyenv init --path)"'
-        create: yes
 
     - name: Install Python using pyenv
       shell: |
@@ -217,41 +199,36 @@
         pyenv install {{ python_version }}
         pyenv global {{ python_version }}
       args:
-        creates: "{{ lookup('env', 'HOME') }}/.pyenv/versions/{{ python_version }}"
+        creates: "{{ user_home }}/.pyenv/versions/{{ python_version }}"
       environment:
-        HOME: "{{ lookup('env', 'HOME') }}"
+        HOME: "{{ user_home }}"
 
-#    - name: Install Poetry using pyenv's Python
-#      shell: |
-#        export PYENV_ROOT="$HOME/.pyenv"
-#        export PATH="$PYENV_ROOT/bin:$PATH"
-#        eval "$(pyenv init --path)"
-#        $(pyenv which pip) install --user poetry
-#      environment:
-#        HOME: "{{ lookup('env', 'HOME') }}"
-#      args:
-#        creates: "{{ lookup('env', 'HOME') }}/.local/bin/poetry"
-#
-#    - name: Add Poetry to PATH
-#      lineinfile:
-#        path: "{{ lookup('env', 'HOME') }}/.bashrc"
-#        line: 'export PATH="$HOME/.local/bin:$PATH"'
-#        create: yes
-#
-#    - name: Configure Poetry to not create virtualenvs inside project directories
-#      shell: "{{ lookup('env', 'HOME') }}/.local/bin/poetry config virtualenvs.in-project false"
-#      environment:
-#        PATH: "{{ lookup('env', 'HOME') }}/.local/bin:{{ ansible_env.PATH }}"
-#        HOME: "{{ lookup('env', 'HOME') }}"
-#
-#    - name: Verify Poetry installation
-#      shell: "{{ lookup('env', 'HOME') }}/.local/bin/poetry --version"
-#      register: poetry_version
-#      changed_when: false
-#
-#    - name: Display Poetry version
-#      debug:
-#        msg: "Poetry version installed: {{ poetry_version.stdout }}"
+    - name: Install Poetry using pyenv's Python
+      shell: |
+        export PYENV_ROOT="$HOME/.pyenv"
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init --path)"
+        $(pyenv which pip) install --user poetry
+      environment:
+        HOME: "{{ user_home }}"
+      args:
+        creates: "{{ user_home }}/.local/bin/poetry"
+
+    - name: Configure Poetry to not create virtualenvs inside project directories
+      shell: "{{ user_home }}/.local/bin/poetry config virtualenvs.in-project false"
+      environment:
+        PATH: "{{ user_home }}/.local/bin:{{ ansible_env.PATH }}"
+        HOME: "{{ user_home }}"
+      changed_when: false
+
+    - name: Verify Poetry installation
+      shell: "{{ user_home }}/.local/bin/poetry --version"
+      register: poetry_version
+      changed_when: false
+
+    - name: Display Poetry version
+      debug:
+        msg: "Poetry version installed: {{ poetry_version.stdout }}"
 
     - name: Install Hatch using pyenv's Python
       shell: |
@@ -260,18 +237,12 @@
         eval "$(pyenv init --path)"
         $(pyenv which pip) install --user hatch
       environment:
-        HOME: "{{ lookup('env', 'HOME') }}"
+        HOME: "{{ user_home }}"
       args:
-        creates: "{{ lookup('env', 'HOME') }}/.local/bin/hatch"
-
-    - name: Add Hatch to PATH
-      lineinfile:
-        path: "{{ lookup('env', 'HOME') }}/.bashrc"
-        line: 'export PATH="$HOME/.local/bin:$PATH"'
-        create: yes
+        creates: "{{ user_home }}/.local/bin/hatch"
 
     - name: Verify Hatch installation
-      shell: "{{ lookup('env', 'HOME') }}/.local/bin/hatch --version"
+      shell: "{{ user_home }}/.local/bin/hatch --version"
       register: hatch_version
       changed_when: false
 
@@ -282,19 +253,13 @@
     - name: Clone nodenv repository
       git:
         repo: 'https://github.com/nodenv/nodenv.git'
-        dest: "{{ lookup('env', 'HOME') }}/.nodenv"
+        dest: "{{ user_home }}/.nodenv"
         update: yes
-
-    - name: Set up nodenv environment variables
-      lineinfile:
-        path: "{{ lookup('env', 'HOME') }}/.bashrc"
-        line: 'export NODENV_ROOT="$HOME/.nodenv"\nexport PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"\neval "$(nodenv init -)"'
-        create: yes
 
     - name: Install node-build plugin for nodenv (force fetch to avoid tag conflicts)
       git:
         repo: 'https://github.com/nodenv/node-build.git'
-        dest: "{{ lookup('env', 'HOME') }}/.nodenv/plugins/node-build"
+        dest: "{{ user_home }}/.nodenv/plugins/node-build"
         version: master
         force: yes
         update: yes
@@ -308,7 +273,7 @@
         nodenv global {{ node_version }}
         nodenv rehash
       args:
-        creates: "{{ lookup('env', 'HOME') }}/.nodenv/versions/{{ node_version }}"
+        creates: "{{ user_home }}/.nodenv/versions/{{ node_version }}"
 
     - name: Verify Node.js installation
       shell: |
@@ -329,6 +294,8 @@
         export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
         eval "$(nodenv init -)"
         npm install -g aws-cdk
+      args:
+        creates: "{{ user_home }}/.nodenv/versions/{{ node_version }}/lib/node_modules/aws-cdk"
 
     - name: Install AWS CLI v2
       become: yes
@@ -338,7 +305,15 @@
         /tmp/aws/install
       args:
         creates: "/usr/local/bin/aws"
-    
+
+    - name: Cleanup AWS CLI installer files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/awscliv2.zip
+        - /tmp/aws
+
     - name: Verify AWS CLI installation
       shell: "aws --version"
       register: aws_cli_version
@@ -354,12 +329,21 @@
         export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
         eval "$(nodenv init -)"
         npm install -g czg
-        
+      args:
+        creates: "{{ user_home }}/.nodenv/versions/{{ node_version }}/lib/node_modules/czg"
+
     - name: Verify CZG (commitizen) installation
-      shell: "czg --version"
+      shell: |
+        export NODENV_ROOT="$HOME/.nodenv"
+        export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
+        eval "$(nodenv init -)"
+        nodenv rehash
+        czg --version
       register: czg_cli_version
-      changed_when: false    
-      
+      changed_when: false
+      environment:
+        HOME: "{{ user_home }}"
+
     - name: Display CZG (commitizen) version
       debug:
         msg: "CZG (commitizen) version installed: {{ czg_cli_version.stdout }}"
@@ -367,14 +351,14 @@
     - name: Copy prepared .czgrc to user's home directory
       copy:
         src: files/czrc
-        dest: "{{ lookup('env', 'HOME') }}/.czgrc"
+        dest: "{{ user_home }}/.czgrc"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0644'
 
     - name: Create .antigen directory
       file:
-        path: "{{ lookup('env', 'HOME') }}/.antigen"
+        path: "{{ user_home }}/.antigen"
         state: directory
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
@@ -383,21 +367,21 @@
     - name: Clone Antigen repository
       git:
         repo: 'https://github.com/zsh-users/antigen.git'
-        dest: "{{ lookup('env', 'HOME') }}/.antigen/antigen"
+        dest: "{{ user_home }}/.antigen/antigen"
         version: master
 
     - name: Copy prepared .zshrc to user's home directory
       copy:
         src: files/zshrc
-        dest: "{{ lookup('env', 'HOME') }}/.zshrc"
+        dest: "{{ user_home }}/.zshrc"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0644'
-        
+
     - name: Copy prepared .p10k.zsh to user's home directory
       copy:
         src: files/.p10k.zsh
-        dest: "{{ lookup('env', 'HOME') }}/.p10k.zsh"
+        dest: "{{ user_home }}/.p10k.zsh"
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0644'
@@ -405,13 +389,14 @@
     - name: Install fzf from GitHub
       git:
         repo: 'https://github.com/junegunn/fzf.git'
-        dest: "{{ lookup('env', 'HOME') }}/.fzf"
+        dest: "{{ user_home }}/.fzf"
         version: master
 
     - name: Run fzf install script
-      shell: "{{ lookup('env', 'HOME') }}/.fzf/install --all"
+      shell: "{{ user_home }}/.fzf/install --all"
       args:
-        chdir: "{{ lookup('env', 'HOME') }}/.fzf"
+        chdir: "{{ user_home }}/.fzf"
+        creates: "{{ user_home }}/.fzf/bin/fzf"
 
     - name: Set Zsh as default shell
       become: yes
@@ -445,36 +430,29 @@
     - name: Find extracted IntelliJ Toolbox directory
       shell: "ls -d /opt/jetbrains-toolbox-*"
       register: toolbox_dir
+      changed_when: false
 
     - name: Install IntelliJ Toolbox
       shell: "{{ toolbox_dir.stdout }}/bin/jetbrains-toolbox"
       args:
-        creates: "{{ lookup('env', 'HOME') }}/.local/share/JetBrains/Toolbox"
+        creates: "{{ user_home }}/.local/share/JetBrains/Toolbox"
 
     - name: Cleanup IntelliJ Toolbox installer
       become: yes
       file:
         path: "/tmp/jetbrains-toolbox.tar.gz"
         state: absent
-        
-    - name: Install dependencies for tfenv
-      become: yes
-      apt:
-        name:
-          - git
-          - curl
-        state: present
 
     - name: Clone tfenv repository
       git:
         repo: 'https://github.com/tfutils/tfenv.git'
-        dest: "{{ lookup('env', 'HOME') }}/.tfenv"
+        dest: "{{ user_home }}/.tfenv"
         update: yes
 
     - name: Create symlinks for tfenv
       become: yes
       file:
-        src: "{{ lookup('env', 'HOME') }}/.tfenv/bin/{{ item }}"
+        src: "{{ user_home }}/.tfenv/bin/{{ item }}"
         dest: "/usr/local/bin/{{ item }}"
         state: link
       loop:
@@ -486,7 +464,7 @@
         export PATH="$HOME/.tfenv/bin:$PATH"
         tfenv install {{ terraform_version }}
       args:
-        creates: "{{ lookup('env', 'HOME') }}/.tfenv/versions/{{ terraform_version }}"
+        creates: "{{ user_home }}/.tfenv/versions/{{ terraform_version }}"
 
     - name: Set Terraform {{ terraform_version }} as global version
       shell: |
@@ -495,32 +473,23 @@
 
     - name: Verify Terraform version
       shell: terraform --version
-      register: terraform_version
+      register: terraform_version_output
       changed_when: false
 
     - name: Display Terraform version
       debug:
-        msg: "Terraform version installed: {{ terraform_version.stdout }}"
-
-    - name: Install dependencies for tofuenv
-      become: yes
-      apt:
-        name:
-          - git
-          - curl
-          - unzip
-        state: present
+        msg: "Terraform version installed: {{ terraform_version_output.stdout }}"
 
     - name: Clone tofuenv repository
       git:
         repo: 'https://github.com/tofuutils/tofuenv.git'
-        dest: "{{ lookup('env', 'HOME') }}/.tofuenv"
+        dest: "{{ user_home }}/.tofuenv"
         update: yes
 
     - name: Create symlinks for tofuenv
       become: yes
       file:
-        src: "{{ lookup('env', 'HOME') }}/.tofuenv/bin/{{ item }}"
+        src: "{{ user_home }}/.tofuenv/bin/{{ item }}"
         dest: "/usr/local/bin/{{ item }}"
         state: link
       loop:
@@ -532,7 +501,7 @@
         export PATH="$HOME/.tofuenv/bin:$PATH"
         tofuenv install {{ tofu_version }}
       args:
-        creates: "{{ lookup('env', 'HOME') }}/.tofuenv/versions/{{ tofu_version }}"
+        creates: "{{ user_home }}/.tofuenv/versions/{{ tofu_version }}"
 
     - name: Set OpenTofu {{ tofu_version }} as global version
       shell: |
@@ -559,19 +528,7 @@
           - runc
         state: absent
 
-    - name: Update apt and install required packages
-      become: yes
-      apt:
-        name:
-          - apt-transport-https
-          - ca-certificates
-          - curl
-          - gnupg
-          - lsb-release
-        state: present
-        update_cache: yes
-
-    - name: Add Docker’s official GPG key
+    - name: Add Docker's official GPG key
       become: yes
       shell: |
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
@@ -584,6 +541,8 @@
         echo \
         "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu \
         $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
 
     - name: Update apt cache after adding Docker repo
       become: yes
@@ -597,7 +556,7 @@
           - docker-ce
           - docker-ce-cli
           - containerd.io
-        state: latest
+        state: present
 
     - name: Ensure Docker service is started and enabled
       become: yes
@@ -621,8 +580,3 @@
     - name: Display Docker version
       debug:
         msg: "Docker version installed: {{ docker_version.stdout }}"
-
-
-
-
-
