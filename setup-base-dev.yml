@@ -6,6 +6,9 @@
 #
 # Run on WSL or a headless/cloud environment (skips GUI tasks):
 #   ansible-playbook setup-base-dev.yml --ask-become-pass -e wsl=true
+#
+# Force overwrite existing dotfiles with versions from files/:
+#   ansible-playbook setup-base-dev.yml --ask-become-pass -e force_copy=true
 - name: Setup Ubuntu System
   hosts: localhost
   vars:
@@ -17,6 +20,11 @@
     ansible_user: "{{ lookup('env', 'USER') }}"
     user_home: "{{ lookup('env', 'HOME') }}"
     wsl: false
+    force_copy: false   # set -e force_copy=true to overwrite existing dotfiles with versions from files/
+    # http_proxy:
+    # HTTP_PROXY:
+    # https_proxy:
+    # HTTPS_PROXY:
   tasks:
     - import_tasks: tasks/base-packages.yml
     - import_tasks: tasks/vim.yml
