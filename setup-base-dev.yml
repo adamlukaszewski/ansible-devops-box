@@ -21,10 +21,15 @@
     user_home: "{{ lookup('env', 'HOME') }}"
     wsl: false
     force_copy: false   # set -e force_copy=true to overwrite existing dotfiles with versions from files/
-    # http_proxy:
-    # HTTP_PROXY:
-    # https_proxy:
-    # HTTPS_PROXY:
+  environment:
+    # Forward proxy settings from the current user's environment into all tasks,
+    # including become (sudo) tasks which strip env vars by default.
+    http_proxy:  "{{ lookup('env', 'http_proxy')  | default('', true) }}"
+    HTTP_PROXY:  "{{ lookup('env', 'HTTP_PROXY')  | default('', true) }}"
+    https_proxy: "{{ lookup('env', 'https_proxy') | default('', true) }}"
+    HTTPS_PROXY: "{{ lookup('env', 'HTTPS_PROXY') | default('', true) }}"
+    no_proxy:    "{{ lookup('env', 'no_proxy')    | default('', true) }}"
+    NO_PROXY:    "{{ lookup('env', 'NO_PROXY')    | default('', true) }}"
   tasks:
     - import_tasks: tasks/base-packages.yml
     - import_tasks: tasks/vim.yml
