@@ -9,12 +9,11 @@
       - runc
     state: absent
 
-- name: Download Docker's official GPG key
+- name: Download Docker's official GPG key (force IPv4)
   become: yes
-  get_url:
-    url: https://download.docker.com/linux/ubuntu/gpg
-    dest: /tmp/docker.gpg
-    mode: '0644'
+  shell: curl -4 -fsSL https://download.docker.com/linux/ubuntu/gpg -o /tmp/docker.gpg
+  args:
+    creates: /tmp/docker.gpg
 
 - name: Dearmor Docker GPG key
   become: yes
