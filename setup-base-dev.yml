@@ -1,8 +1,11 @@
 # before you can run this base dev ansible you need to install the ansible environment:
 # sudo apt update && sudo apt install -y ansible && sudo ansible --version
 #
-# Than just run this in the folder:
-# ansible-playbook setup-base-dev.yml --ask-become-pass
+# Run on a desktop machine:
+#   ansible-playbook setup-base-dev.yml --ask-become-pass
+#
+# Run on WSL or a headless/cloud environment (skips GUI tasks):
+#   ansible-playbook setup-base-dev.yml --ask-become-pass -e wsl=true
 - name: Setup Ubuntu System
   hosts: localhost
   vars:
@@ -13,6 +16,7 @@
     tofu_version: "1.6.2"
     ansible_user: "{{ lookup('env', 'USER') }}"
     user_home: "{{ lookup('env', 'HOME') }}"
+    wsl: false
   tasks:
     - name: Update and upgrade apt packages
       become: yes
@@ -95,6 +99,7 @@
       shell: gsettings get org.gnome.Terminal.ProfilesList default | tr -d "'"
       register: gnome_terminal_profile
       changed_when: false
+      when: not wsl
 
     - name: Set MesloLGS NF as GNOME Terminal font
       shell: |
@@ -103,6 +108,7 @@
       environment:
         HOME: "{{ user_home }}"
       changed_when: false
+      when: not wsl
 
     - name: Clone VundleVim repository
       git:
