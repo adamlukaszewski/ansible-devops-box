@@ -1,7 +1,7 @@
 - name: Clone VundleVim repository
   git:
     repo: 'https://github.com/VundleVim/Vundle.vim.git'
-    dest: "{{ user_home }}/.vim/bundle/VundleVim"
+    dest: "{{ user_home }}/.vim/bundle/Vundle.vim"
 
 - name: Copy vimrc to user's home directory
   copy:
@@ -13,8 +13,8 @@
     force: "{{ force_copy }}"
 
 - name: Install Vim plugins
-  shell: vim +PluginInstall +qall
+  shell: vim +PluginInstall +qall < /dev/null
   args:
-    creates: "{{ user_home }}/.vim/bundle/vim-airline"
+    creates: "{{ user_home }}/.vim/bundle/vim-airline/plugin/airline.vim"
   environment:
     HOME: "{{ user_home }}"
