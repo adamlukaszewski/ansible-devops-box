@@ -1,0 +1,36 @@
+- name: Clone tofuenv repository
+  git:
+    repo: 'https://github.com/tofuutils/tofuenv.git'
+    dest: "{{ user_home }}/.tofuenv"
+    update: yes
+
+- name: Create symlinks for tofuenv
+  become: yes
+  file:
+    src: "{{ user_home }}/.tofuenv/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+  loop:
+    - tofuenv
+    - tofu
+
+- name: Install OpenTofu {{ tofu_version }} using tofuenv
+  shell: |
+    export PATH="$HOME/.tofuenv/bin:$PATH"
+    tofuenv install {{ tofu_version }}
+  args:
+    creates: "{{ user_home }}/.tofuenv/versions/{{ tofu_version }}"
+
+- name: Set OpenTofu {{ tofu_version }} as global version
+  shell: |
+    export PATH="$HOME/.tofuenv/bin:$PATH"
+    tofuenv use {{ tofu_version }}
+
+- name: Verify OpenTofu version
+  shell: tofu --version
+  register: tofu_version_output
+  changed_when: false
+
+- name: Display OpenTofu version
+  debug:
+    msg: "OpenTofu version installed: {{ tofu_version_output.stdout }}"

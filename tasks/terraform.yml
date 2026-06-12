@@ -1,0 +1,36 @@
+- name: Clone tfenv repository
+  git:
+    repo: 'https://github.com/tfutils/tfenv.git'
+    dest: "{{ user_home }}/.tfenv"
+    update: yes
+
+- name: Create symlinks for tfenv
+  become: yes
+  file:
+    src: "{{ user_home }}/.tfenv/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+  loop:
+    - tfenv
+    - terraform
+
+- name: Install Terraform {{ terraform_version }} using tfenv
+  shell: |
+    export PATH="$HOME/.tfenv/bin:$PATH"
+    tfenv install {{ terraform_version }}
+  args:
+    creates: "{{ user_home }}/.tfenv/versions/{{ terraform_version }}"
+
+- name: Set Terraform {{ terraform_version }} as global version
+  shell: |
+    export PATH="$HOME/.tfenv/bin:$PATH"
+    tfenv use {{ terraform_version }}
+
+- name: Verify Terraform version
+  shell: terraform --version
+  register: terraform_version_output
+  changed_when: false
+
+- name: Display Terraform version
+  debug:
+    msg: "Terraform version installed: {{ terraform_version_output.stdout }}"

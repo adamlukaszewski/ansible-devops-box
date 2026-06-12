@@ -1,0 +1,68 @@
+- name: Clone jenv repository
+  git:
+    repo: 'https://github.com/jenv/jenv.git'
+    dest: "{{ user_home }}/.jenv"
+    update: yes
+
+- name: Ensure jenv is loaded for Ansible shell
+  shell: |
+    export JENV_ROOT="$HOME/.jenv"
+    export PATH="$JENV_ROOT/bin:$PATH"
+    eval "$(jenv init -)"
+    jenv --version
+  environment:
+    HOME: "{{ user_home }}"
+  args:
+    executable: /bin/zsh
+  changed_when: false
+
+- name: Find installed Java home
+  shell: |
+    update-alternatives --list java | sed 's|/bin/java||' | head -n 1
+  register: java_home
+  changed_when: false
+
+- name: Add installed Java to jenv
+  shell: |
+    export JENV_ROOT="$HOME/.jenv"
+    export PATH="$JENV_ROOT/bin:$PATH"
+    eval "$(jenv init -)"
+    jenv add {{ java_home.stdout }}
+  args:
+    creates: "{{ user_home }}/.jenv/versions"
+    executable: /bin/zsh
+
+- name: Enable jenv export plugin
+  shell: |
+    export JENV_ROOT="$HOME/.jenv"
+    export PATH="$JENV_ROOT/bin:$PATH"
+    eval "$(jenv init -)"
+    jenv enable-plugin export
+  args:
+    executable: /bin/zsh
+  changed_when: false
+
+- name: Set global Java version with jenv
+  shell: |
+    export JENV_ROOT="$HOME/.jenv"
+    export PATH="$JENV_ROOT/bin:$PATH"
+    eval "$(jenv init -)"
+    jenv global $(jenv versions --bare | grep "^21" | head -n 1)
+    jenv rehash
+  args:
+    executable: /bin/zsh
+
+- name: Verify Java version
+  shell: |
+    export JENV_ROOT="$HOME/.jenv"
+    export PATH="$JENV_ROOT/bin:$PATH"
+    eval "$(jenv init -)"
+    java -version
+  register: java_version_output
+  changed_when: false
+  args:
+    executable: /bin/zsh
+
+- name: Display Java version
+  debug:
+    msg: "Java version installed: {{ java_version_output.stderr }}"

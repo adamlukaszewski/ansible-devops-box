@@ -1,0 +1,25 @@
+- name: Install AWS CLI v2
+  become: yes
+  shell: |
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+    unzip /tmp/awscliv2.zip -d /tmp
+    /tmp/aws/install
+  args:
+    creates: "/usr/local/bin/aws"
+
+- name: Cleanup AWS CLI installer files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/awscliv2.zip
+    - /tmp/aws
+
+- name: Verify AWS CLI installation
+  shell: "aws --version"
+  register: aws_cli_version
+  changed_when: false
+
+- name: Display AWS CLI version
+  debug:
+    msg: "AWS CLI version installed: {{ aws_cli_version.stdout }}"

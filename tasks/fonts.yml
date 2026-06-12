@@ -1,0 +1,39 @@
+- name: Create fonts directory for user
+  file:
+    path: "{{ user_home }}/.local/share/fonts"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Download MesloLGS NF fonts for Powerlevel10k
+  get_url:
+    url: "{{ item.url }}"
+    dest: "{{ user_home }}/.local/share/fonts/{{ item.name }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  loop:
+    - { name: "MesloLGS NF Regular.ttf",    url: "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf" }
+    - { name: "MesloLGS NF Bold.ttf",        url: "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold.ttf" }
+    - { name: "MesloLGS NF Italic.ttf",      url: "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Italic.ttf" }
+    - { name: "MesloLGS NF Bold Italic.ttf", url: "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold%20Italic.ttf" }
+
+- name: Rebuild font cache
+  shell: "fc-cache -fv {{ user_home }}/.local/share/fonts"
+  environment:
+    HOME: "{{ user_home }}"
+  changed_when: false
+
+- name: Get GNOME Terminal default profile UUID
+  shell: gsettings get org.gnome.Terminal.ProfilesList default | tr -d "'"
+  register: gnome_terminal_profile
+  changed_when: false
+
+- name: Set MesloLGS NF as GNOME Terminal font
+  shell: |
+    gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:{{ gnome_terminal_profile.stdout }}/ font 'MesloLGS NF 12'
+    gsettings set org.gnome.Terminal.Legacy.Profile:/org/gnome/terminal/legacy/profiles:/:{{ gnome_terminal_profile.stdout }}/ use-system-font false
+  environment:
+    HOME: "{{ user_home }}"
+  changed_when: false

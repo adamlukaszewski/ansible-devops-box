@@ -1,0 +1,64 @@
+- name: Clone pyenv repository
+  git:
+    repo: 'https://github.com/pyenv/pyenv.git'
+    dest: "{{ user_home }}/.pyenv"
+    update: yes
+
+- name: Install Python using pyenv
+  shell: |
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init --path)"
+    pyenv install {{ python_version }}
+    pyenv global {{ python_version }}
+  args:
+    creates: "{{ user_home }}/.pyenv/versions/{{ python_version }}"
+  environment:
+    HOME: "{{ user_home }}"
+
+- name: Install Poetry using pyenv's Python
+  shell: |
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init --path)"
+    $(pyenv which pip) install --user poetry
+  environment:
+    HOME: "{{ user_home }}"
+  args:
+    creates: "{{ user_home }}/.local/bin/poetry"
+
+- name: Configure Poetry to not create virtualenvs inside project directories
+  shell: "{{ user_home }}/.local/bin/poetry config virtualenvs.in-project false"
+  environment:
+    PATH: "{{ user_home }}/.local/bin:{{ ansible_env.PATH }}"
+    HOME: "{{ user_home }}"
+  changed_when: false
+
+- name: Verify Poetry installation
+  shell: "{{ user_home }}/.local/bin/poetry --version"
+  register: poetry_version
+  changed_when: false
+
+- name: Display Poetry version
+  debug:
+    msg: "Poetry version installed: {{ poetry_version.stdout }}"
+
+- name: Install Hatch using pyenv's Python
+  shell: |
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init --path)"
+    $(pyenv which pip) install --user hatch
+  environment:
+    HOME: "{{ user_home }}"
+  args:
+    creates: "{{ user_home }}/.local/bin/hatch"
+
+- name: Verify Hatch installation
+  shell: "{{ user_home }}/.local/bin/hatch --version"
+  register: hatch_version
+  changed_when: false
+
+- name: Display Hatch version
+  debug:
+    msg: "Hatch version installed: {{ hatch_version.stdout }}"

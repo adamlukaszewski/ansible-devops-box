@@ -1,0 +1,38 @@
+- name: Get latest IntelliJ Toolbox download URL
+  uri:
+    url: https://data.services.jetbrains.com/products/releases?code=TBA&latest=true&type=release
+    return_content: yes
+  register: toolbox_release
+
+- name: Set IntelliJ Toolbox download URL
+  set_fact:
+    toolbox_download_url: "{{ toolbox_release.json.TBA[0].downloads.linux.link }}"
+
+- name: Download IntelliJ Toolbox
+  become: yes
+  get_url:
+    url: "{{ toolbox_download_url }}"
+    dest: "/tmp/jetbrains-toolbox.tar.gz"
+
+- name: Extract IntelliJ Toolbox
+  become: yes
+  unarchive:
+    src: "/tmp/jetbrains-toolbox.tar.gz"
+    dest: "/opt/"
+    remote_src: yes
+
+- name: Find extracted IntelliJ Toolbox directory
+  shell: "ls -d /opt/jetbrains-toolbox-*"
+  register: toolbox_dir
+  changed_when: false
+
+- name: Install IntelliJ Toolbox
+  shell: "{{ toolbox_dir.stdout }}/bin/jetbrains-toolbox"
+  args:
+    creates: "{{ user_home }}/.local/share/JetBrains/Toolbox"
+
+- name: Cleanup IntelliJ Toolbox installer
+  become: yes
+  file:
+    path: "/tmp/jetbrains-toolbox.tar.gz"
+    state: absent

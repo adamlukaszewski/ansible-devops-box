@@ -1,0 +1,49 @@
+- name: Update and upgrade apt packages
+  become: yes
+  apt:
+    update_cache: yes
+    upgrade: dist
+
+- name: Remove unnecessary packages
+  become: yes
+  apt:
+    name: thunderbird*
+    state: absent
+
+- name: Install necessary packages
+  become: yes
+  apt:
+    name:
+      - git
+      - curl
+      - wget
+      - unzip
+      - openvpn
+      - vim
+      - vim-gtk3
+      - fonts-powerline
+      - zsh
+      - tmux
+      - htop
+      - build-essential
+      - libssl-dev
+      - zlib1g-dev
+      - libbz2-dev
+      - libreadline-dev
+      - libsqlite3-dev
+      - llvm
+      - libncurses5-dev
+      - libncursesw5-dev
+      - xz-utils
+      - tk-dev
+      - libffi-dev
+      - liblzma-dev
+      - python3-openssl
+      - libfuse2
+      - python3-pip
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - openjdk-21-jdk
+    state: present

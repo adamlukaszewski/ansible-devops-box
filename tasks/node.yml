@@ -1,0 +1,79 @@
+- name: Clone nodenv repository
+  git:
+    repo: 'https://github.com/nodenv/nodenv.git'
+    dest: "{{ user_home }}/.nodenv"
+    update: yes
+
+- name: Install node-build plugin for nodenv
+  git:
+    repo: 'https://github.com/nodenv/node-build.git'
+    dest: "{{ user_home }}/.nodenv/plugins/node-build"
+    version: master
+    force: yes
+    update: yes
+
+- name: Install Node.js using nodenv
+  shell: |
+    export NODENV_ROOT="$HOME/.nodenv"
+    export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
+    eval "$(nodenv init -)"
+    nodenv install {{ node_version }}
+    nodenv global {{ node_version }}
+    nodenv rehash
+  args:
+    creates: "{{ user_home }}/.nodenv/versions/{{ node_version }}"
+
+- name: Verify Node.js installation
+  shell: |
+    export NODENV_ROOT="$HOME/.nodenv"
+    export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
+    eval "$(nodenv init -)"
+    node --version
+  register: node_version_output
+  changed_when: false
+
+- name: Display Node.js version
+  debug:
+    msg: "Node.js version installed: {{ node_version_output.stdout }}"
+
+- name: Install AWS CDK globally using npm
+  shell: |
+    export NODENV_ROOT="$HOME/.nodenv"
+    export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
+    eval "$(nodenv init -)"
+    npm install -g aws-cdk
+  args:
+    creates: "{{ user_home }}/.nodenv/versions/{{ node_version }}/lib/node_modules/aws-cdk"
+
+- name: Install CZG (commitizen) globally using npm
+  shell: |
+    export NODENV_ROOT="$HOME/.nodenv"
+    export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
+    eval "$(nodenv init -)"
+    npm install -g czg
+  args:
+    creates: "{{ user_home }}/.nodenv/versions/{{ node_version }}/lib/node_modules/czg"
+
+- name: Verify CZG (commitizen) installation
+  shell: |
+    export NODENV_ROOT="$HOME/.nodenv"
+    export PATH="$NODENV_ROOT/bin:$NODENV_ROOT/shims:$PATH"
+    eval "$(nodenv init -)"
+    nodenv rehash
+    czg --version
+  register: czg_cli_version
+  changed_when: false
+  environment:
+    HOME: "{{ user_home }}"
+
+- name: Display CZG (commitizen) version
+  debug:
+    msg: "CZG (commitizen) version installed: {{ czg_cli_version.stdout }}"
+
+- name: Copy prepared .czgrc to user's home directory
+  copy:
+    src: files/czrc
+    dest: "{{ user_home }}/.czgrc"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
