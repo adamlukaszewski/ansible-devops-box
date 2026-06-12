@@ -3,9 +3,18 @@
     repo: 'https://github.com/VundleVim/Vundle.vim.git'
     dest: "{{ user_home }}/.vim/bundle/VundleVim"
 
+- name: Copy vimrc to user's home directory
+  copy:
+    src: files/vimrc
+    dest: "{{ user_home }}/.vimrc"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+    force: "{{ force_copy }}"
+
 - name: Install Vim plugins
   shell: vim +PluginInstall +qall
   args:
-    creates: "{{ user_home }}/.vim/bundle/VundleVim/autoload/vundle.vim"
+    creates: "{{ user_home }}/.vim/bundle/vim-airline"
   environment:
     HOME: "{{ user_home }}"
