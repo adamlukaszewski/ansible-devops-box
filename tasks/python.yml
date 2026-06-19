@@ -16,14 +16,12 @@
   environment:
     HOME: "{{ user_home }}"
 
-- name: Install Poetry using pyenv's Python
+- name: Install Poetry using official installer
   shell: |
-    export PYENV_ROOT="$HOME/.pyenv"
-    export PATH="$PYENV_ROOT/bin:$PATH"
-    eval "$(pyenv init --path)"
-    $(pyenv which pip) install --user poetry
+    curl -sSL https://install.python-poetry.org | python3 -
   environment:
     HOME: "{{ user_home }}"
+    POETRY_HOME: "{{ user_home }}/.local"
   args:
     creates: "{{ user_home }}/.local/bin/poetry"
 
