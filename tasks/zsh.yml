@@ -34,13 +34,23 @@
   git:
     repo: 'https://github.com/junegunn/fzf.git'
     dest: "{{ user_home }}/.fzf"
-    version: master
+    version: "v{{ fzf_version }}"
+  register: fzf_git
+
+- name: Remove fzf binaries to force reinstall on version change
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ user_home }}/.fzf/bin/fzf"
+    - "{{ user_home }}/bin/fzf"
+  when: fzf_git.changed
 
 - name: Run fzf install script
-  shell: "{{ user_home }}/.fzf/install --all"
+  shell: "{{ user_home }}/.fzf/install --key-bindings --completion --no-update-rc"
   args:
     chdir: "{{ user_home }}/.fzf"
-    creates: "{{ user_home }}/.fzf/bin/fzf"
+  when: fzf_git.changed
 
 - name: Set Zsh as default shell
   become: yes

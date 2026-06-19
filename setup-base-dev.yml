@@ -17,6 +17,7 @@
     java_version: "21"
     terraform_version: "1.14.4"
     tofu_version: "1.6.2"
+    fzf_version: "0.73.1"
     ansible_user: "{{ lookup('env', 'USER') }}"
     user_home: "{{ lookup('env', 'HOME') }}"
     wsl: false
@@ -38,6 +39,7 @@
     - import_tasks: tasks/node.yml
     - import_tasks: tasks/aws.yml
     - import_tasks: tasks/zsh.yml
+      tags: zsh
     - import_tasks: tasks/terraform.yml
     - import_tasks: tasks/tofu.yml
     - import_tasks: tasks/docker.yml
